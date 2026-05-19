@@ -7,7 +7,10 @@ Usage
 Cleartext endpoint (port 51825):
     python main.py [--username NAME]
 
-Encrypted endpoint (port 51820, requires your student keypair):
+Encrypted endpoint (port 51820, using your Base64 student private key):
+    python main.py --encrypted --private-key-b64 <base64>
+
+Encrypted endpoint (legacy hex format):
     python main.py --encrypted --private-key-hex <hex> --public-key-hex <hex>
 
     Or set the environment variables:
@@ -19,9 +22,12 @@ Retrieve your personal keypair from https://csc4026z.link/keys
 
 import argparse
 import asyncio
+import base64
 import logging
 import os
 import sys
+
+import nacl.public
 
 from chat_client.client import ChatClient
 from chat_client.ui import run_ui
@@ -45,11 +51,19 @@ def _parse_args() -> argparse.Namespace:
         help='Use the encrypted WireGuard endpoint (port 51820).',
     )
     parser.add_argument(
+        '--private-key-b64',
+        default=None,
+        help=(
+            'Base64-encoded 32-byte static private key '
+            '(required with --encrypted; public key is derived automatically).'
+        ),
+    )
+    parser.add_argument(
         '--private-key-hex',
         default=None,
         help=(
             '64-character hex-encoded static private key '
-            '(required with --encrypted).'
+            '(alternative to --private-key-b64; requires --public-key-hex).'
         ),
     )
     parser.add_argument(
@@ -57,7 +71,7 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help=(
             '64-character hex-encoded static public key '
-            '(required with --encrypted).'
+            '(only needed together with --private-key-hex).'
         ),
     )
     parser.add_argument(
@@ -89,25 +103,48 @@ async def _main() -> None:
     )
 
     if args.encrypted:
-        if not private_key_hex or not public_key_hex:
+        if args.private_key_b64:
+            # Base64 path: decode private key and derive public key automatically
+            try:
+                client_static_private = base64.b64decode(args.private_key_b64)
+            except Exception as exc:
+                print(f'Error decoding Base64 private key: {exc}', file=sys.stderr)
+                sys.exit(1)
+            if len(client_static_private) != 32:
+                print(
+                    f'Error: Base64-decoded private key must be exactly 32 bytes '
+                    f'(got {len(client_static_private)}).',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            try:
+                client_static_public = bytes(
+                    nacl.public.PrivateKey(client_static_private).public_key
+                )
+            except Exception as exc:
+                print(f'Error deriving public key from private key: {exc}', file=sys.stderr)
+                sys.exit(1)
+        elif private_key_hex and public_key_hex:
+            # Hex path (legacy / explicit)
+            try:
+                client_static_private = bytes.fromhex(private_key_hex)
+                client_static_public  = bytes.fromhex(public_key_hex)
+            except ValueError as exc:
+                print(f'Error parsing keypair: {exc}', file=sys.stderr)
+                sys.exit(1)
+            if len(client_static_private) != 32 or len(client_static_public) != 32:
+                print(
+                    'Error: keys must each be exactly 32 bytes (64 hex chars).',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        else:
             print(
                 'Error: --encrypted requires a static keypair.\n'
-                'Provide --private-key-hex and --public-key-hex, or set\n'
-                '  CHAT_PRIVATE_KEY_HEX and CHAT_PUBLIC_KEY_HEX\n'
+                'Provide --private-key-b64 <base64_private_key>, or\n'
+                '  --private-key-hex <hex> --public-key-hex <hex>\n'
+                'Or set CHAT_PRIVATE_KEY_HEX and CHAT_PUBLIC_KEY_HEX.\n'
                 'Retrieve your keypair from https://csc4026z.link/keys',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        try:
-            client_static_private = bytes.fromhex(private_key_hex)
-            client_static_public  = bytes.fromhex(public_key_hex)
-        except ValueError as exc:
-            print(f'Error parsing keypair: {exc}', file=sys.stderr)
-            sys.exit(1)
-
-        if len(client_static_private) != 32 or len(client_static_public) != 32:
-            print(
-                'Error: keys must each be exactly 32 bytes (64 hex chars).',
                 file=sys.stderr,
             )
             sys.exit(1)
