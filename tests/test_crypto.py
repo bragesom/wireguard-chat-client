@@ -188,10 +188,15 @@ class TestTimestamp(unittest.TestCase):
         t      = time.time()
         ts     = Timestamp(t)
         tai_s, nanos = struct.unpack('>QI', ts)
-        unix_s = tai_s - (1 << 62)
+        unix_s = tai_s - (1 << 62) - 10  # subtract TAI-UTC epoch offset
         self.assertAlmostEqual(unix_s, int(t), delta=1)
         self.assertGreaterEqual(nanos, 0)
         self.assertLess(nanos, 1_000_000_000)
+
+    def test_known_value(self):
+        t        = 1744366282.5143921
+        expected = b'@\x00\x00\x00g\xf8\xea\xd4\x00\x07\xd9X'
+        self.assertEqual(Timestamp(t), expected)
 
 
 class TestInitiationConstruction(unittest.TestCase):

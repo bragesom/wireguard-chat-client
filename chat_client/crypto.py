@@ -164,7 +164,7 @@ def Timestamp(t: Optional[float] = None) -> bytes:
     if t is None:
         t = time.time()
     seconds = int(t)
-    nanoseconds = int((t - seconds) * 1_000_000_000)
+    nanoseconds = int((t - seconds) * 1_000_000)
     # TAI64 epoch offset: 2^62
-    tai_seconds = (1 << 62) + seconds
+    tai_seconds = (1 << 62) + seconds + 10  # TAI-UTC offset at Unix epoch (1970)
     return struct.pack('>QI', tai_seconds, nanoseconds)
