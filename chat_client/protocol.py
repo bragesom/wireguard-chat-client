@@ -4,9 +4,6 @@ Chat protocol message definitions and helpers.
 All messages are encoded with MessagePack as specified.  Every request
 (except CONNECT) must include the ``session`` field obtained from the server
 during the CONNECT handshake.
-
-Request type constants may need to be updated once the full protocol
-documentation is available — they are grouped here for easy maintenance.
 """
 
 import random
@@ -14,22 +11,23 @@ import msgpack
 
 
 # ---------------------------------------------------------------------------
-# Request type constants
+# Request type constants  (server-authoritative numbering)
 # ---------------------------------------------------------------------------
 
 REQUEST_CONNECT         = 1
 REQUEST_DISCONNECT      = 2
 REQUEST_PING            = 3
-REQUEST_SET_USERNAME    = 4
+REQUEST_CREATE_CHANNEL  = 4
 REQUEST_LIST_CHANNELS   = 5
-REQUEST_LIST_USERS      = 6
-REQUEST_USER_INFO       = 7
-REQUEST_CHANNEL_INFO    = 8
-REQUEST_JOIN_CHANNEL    = 9
-REQUEST_LEAVE_CHANNEL   = 10
-REQUEST_SEND_MESSAGE    = 11
+REQUEST_CHANNEL_INFO    = 6
+REQUEST_JOIN_CHANNEL    = 7
+REQUEST_LEAVE_CHANNEL   = 8
+REQUEST_SEND_MESSAGE    = 9
+REQUEST_WHOIS           = 10   # Query info about another user
+REQUEST_WHOAMI          = 11   # Query your own username
 REQUEST_SEND_DM         = 12
-REQUEST_CREATE_CHANNEL  = 13
+REQUEST_SET_USERNAME    = 13
+REQUEST_LIST_USERS      = 14   # Paginated user list (optional channel filter)
 
 
 # ---------------------------------------------------------------------------
@@ -56,11 +54,6 @@ def decode(data: bytes) -> dict:
 # ---------------------------------------------------------------------------
 
 def connect_request() -> tuple[bytes, int]:
-    """Build a CONNECT request.
-
-    Returns:
-        (encoded_bytes, request_handle)
-    """
     handle = new_handle()
     msg = {'request_type': REQUEST_CONNECT, 'request_handle': handle}
     return encode(msg), handle
@@ -97,30 +90,46 @@ def set_username_request(session: bytes, username: str) -> tuple[bytes, int]:
     return encode(msg), handle
 
 
-def list_channels_request(session: bytes) -> tuple[bytes, int]:
+def list_channels_request(session: bytes, offset: int = 0) -> tuple[bytes, int]:
     handle = new_handle()
     msg = {
         'request_type': REQUEST_LIST_CHANNELS,
         'request_handle': handle,
         'session': session,
     }
+    if offset:
+        msg['offset'] = offset
     return encode(msg), handle
 
 
-def list_users_request(session: bytes) -> tuple[bytes, int]:
+def list_users_request(session: bytes, channel: str = None, offset: int = 0) -> tuple[bytes, int]:
     handle = new_handle()
     msg = {
         'request_type': REQUEST_LIST_USERS,
         'request_handle': handle,
         'session': session,
     }
+    if channel:
+        msg['channel'] = channel
+    if offset:
+        msg['offset'] = offset
     return encode(msg), handle
 
 
-def user_info_request(session: bytes, username: str) -> tuple[bytes, int]:
+def whoami_request(session: bytes) -> tuple[bytes, int]:
     handle = new_handle()
     msg = {
-        'request_type': REQUEST_USER_INFO,
+        'request_type': REQUEST_WHOAMI,
+        'request_handle': handle,
+        'session': session,
+    }
+    return encode(msg), handle
+
+
+def whois_request(session: bytes, username: str) -> tuple[bytes, int]:
+    handle = new_handle()
+    msg = {
+        'request_type': REQUEST_WHOIS,
         'request_handle': handle,
         'session': session,
         'username': username,
@@ -183,7 +192,7 @@ def send_dm_request(
         'request_type': REQUEST_SEND_DM,
         'request_handle': handle,
         'session': session,
-        'recipient': recipient,
+        'to_username': recipient,   # server field name is to_username
         'message': message,
     }
     return encode(msg), handle

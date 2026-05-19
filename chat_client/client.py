@@ -130,6 +130,13 @@ class ChatClient:
         if self.use_encryption:
             await self._wireguard_handshake(loop)
 
+        # Start receive loop before sending CONNECT so the response is picked up
+        self._running = True
+        self._tasks = [
+            asyncio.create_task(self._receive_loop()),
+            asyncio.create_task(self._ping_loop()),
+        ]
+
         # Send CONNECT
         data, handle = proto.connect_request()
         response = await self._request(data, handle)
@@ -137,13 +144,6 @@ class ChatClient:
         # Server returns a session identifier
         self.session = response.get('session')
         logger.debug('Connected, session=%s', self.session)
-
-        # Start background tasks
-        self._running = True
-        self._tasks = [
-            asyncio.create_task(self._receive_loop()),
-            asyncio.create_task(self._ping_loop()),
-        ]
 
         if username:
             await self.set_username(username)
@@ -170,10 +170,10 @@ class ChatClient:
             self.username = username
         return response
 
-    async def list_channels(self) -> dict:
+    async def list_channels(self, offset: int = 0) -> dict:
         """Fetch the list of available channels."""
         self._require_session()
-        data, handle = proto.list_channels_request(self.session)
+        data, handle = proto.list_channels_request(self.session, offset)
         return await self._request(data, handle)
 
     async def list_users(self) -> dict:
@@ -182,10 +182,16 @@ class ChatClient:
         data, handle = proto.list_users_request(self.session)
         return await self._request(data, handle)
 
-    async def user_info(self, username: str) -> dict:
-        """Get information about a specific user."""
+    async def whoami(self) -> dict:
+        """Get your own current username."""
         self._require_session()
-        data, handle = proto.user_info_request(self.session, username)
+        data, handle = proto.whoami_request(self.session)
+        return await self._request(data, handle)
+
+    async def user_info(self, username: str) -> dict:
+        """Get information about a specific user (WHOIS)."""
+        self._require_session()
+        data, handle = proto.whois_request(self.session, username)
         return await self._request(data, handle)
 
     async def channel_info(self, channel: str) -> dict:

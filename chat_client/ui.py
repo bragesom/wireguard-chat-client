@@ -62,63 +62,77 @@ def _render_response(data: dict) -> None:
         _print_error(str(data['error']))
         return
 
-    # Channels list
-    if 'channels' in data:
+    rtype = data.get('response_type')
+
+    # Channels list (CHANNEL_LIST response_type=26)
+    if rtype == 26 or 'channels' in data:
         table = Table(title='Channels', box=box.SIMPLE)
         table.add_column('Name', style='bold cyan')
-        table.add_column('Description')
-        table.add_column('Members', justify='right')
-        for ch in data['channels']:
-            if isinstance(ch, dict):
-                name  = str(ch.get('name', ''))
-                desc  = str(ch.get('description', ''))
-                count = str(ch.get('member_count', ch.get('members', '')))
-                table.add_row(name, desc, count)
-            else:
-                table.add_row(str(ch), '', '')
+        for ch in data.get('channels', []):
+            table.add_row(str(ch))
+        if data.get('next_page'):
+            table.add_row('[dim]… more pages[/dim]')
         console.print(table)
         return
 
-    # Users list
-    if 'users' in data:
+    # Users list (USER_LIST response_type=35)
+    if rtype == 35 or 'users' in data:
         table = Table(title='Connected Users', box=box.SIMPLE)
         table.add_column('Username', style='bold green')
-        table.add_column('Info')
-        for user in data['users']:
-            if isinstance(user, dict):
-                table.add_row(str(user.get('username', '')),
-                              str(user.get('info', '')))
-            else:
-                table.add_row(str(user), '')
+        for user in data.get('users', []):
+            table.add_row(str(user))
+        if data.get('next_page'):
+            table.add_row('[dim]… more pages[/dim]')
         console.print(table)
         return
 
-    # Channel info
-    if 'channel' in data and 'description' in data:
+    # Channel info (CHANNEL_INFO response_type=27)
+    if rtype == 27:
+        members = ', '.join(str(m) for m in data.get('members', []))
         panel_text = (
-            f"[bold]Channel:[/bold] {data['channel']}\n"
+            f"[bold]Channel:[/bold] {data.get('channel', '')}\n"
             f"[bold]Description:[/bold] {data.get('description', '')}\n"
+            f"[bold]Members:[/bold] {members}"
         )
-        if 'members' in data:
-            members = ', '.join(str(m) for m in data['members'])
-            panel_text += f"[bold]Members:[/bold] {members}"
         console.print(Panel(panel_text, title='Channel Info'))
         return
 
-    # User info
-    if 'username' in data and ('info' in data or 'joined' in data):
-        panel_text = f"[bold]Username:[/bold] {data['username']}\n"
-        for k, v in data.items():
-            if k not in ('username', 'response_handle', 'request_handle'):
-                panel_text += f"[bold]{k}:[/bold] {v}\n"
+    # WHOIS (response_type=31)
+    if rtype == 31:
+        channels = ', '.join(str(c) for c in data.get('channels', []))
+        panel_text = (
+            f"[bold]Username:[/bold] {data.get('username', '')}\n"
+            f"[bold]Transport:[/bold] {data.get('transport', '')}\n"
+            f"[bold]Channels:[/bold] {channels}\n"
+        )
+        pub_key = data.get('wireguard_public_key', '')
+        if pub_key:
+            panel_text += f"[bold]WireGuard key:[/bold] {pub_key}\n"
         console.print(Panel(panel_text, title='User Info'))
         return
 
-    # Generic key-value output
-    filtered = {
-        k: v for k, v in data.items()
-        if k not in ('response_handle',)
-    }
+    # WHOAMI (response_type=32)
+    if rtype == 32:
+        _print_info(f"Your username: {data.get('username', '?')}")
+        return
+
+    # SET_USERNAME (response_type=34)
+    if rtype == 34:
+        _print_success(
+            f"Username changed: {data.get('old_username')} → {data.get('new_username')}"
+        )
+        return
+
+    # CHANNEL_CREATE (response_type=25)
+    if rtype == 25:
+        _print_success(
+            f"Channel #{data.get('channel')} created. "
+            f"Description: {data.get('description', '')}"
+        )
+        return
+
+    # Generic key-value fallback
+    filtered = {k: v for k, v in data.items() if k != 'response_handle'}
     if filtered:
         console.print(filtered)
 
@@ -140,39 +154,65 @@ class UIState:
 def make_notification_handler(state: 'UIState') -> Callable[[dict], None]:
     """Return a callback that pretty-prints unsolicited server messages."""
     def handler(msg: dict) -> None:
-        msg_type = msg.get('type') or msg.get('message_type') or ''
+        rtype = msg.get('response_type')
 
-        # Channel message
-        if 'channel' in msg and 'message' in msg and 'sender' in msg:
-            channel = msg['channel']
-            sender  = msg['sender']
-            text    = msg['message']
+        # CHANNEL_MESSAGE (30) — unsolicited when others post
+        if rtype == 30:
             console.print(
-                f'[bold magenta][{channel}][/bold magenta] '
-                f'[bold]{sender}[/bold]: {text}'
+                f'[bold magenta][#{msg.get("channel")}][/bold magenta] '
+                f'[bold]{msg.get("username")}[/bold]: {msg.get("message")}'
             )
             return
 
-        # Direct message
-        if 'message' in msg and 'sender' in msg and 'channel' not in msg:
-            sender = msg['sender']
-            text   = msg['message']
+        # USER_MESSAGE / DM (33) — unsolicited for recipient
+        if rtype == 33:
             console.print(
-                f'[bold yellow][DM from {sender}][/bold yellow]: {text}'
+                f'[bold yellow][DM from {msg.get("from_username")}][/bold yellow]'
+                f': {msg.get("message")}'
             )
             return
 
-        # User joined/left a channel
-        if 'joined' in msg or 'left' in msg:
-            action  = 'joined' if 'joined' in msg else 'left'
-            who     = msg.get('user', msg.get('username', '?'))
-            channel = msg.get('channel', '?')
+        # CHANNEL_JOIN (28) — unsolicited when another user joins
+        if rtype == 28:
             console.print(
-                f'[dim]* {who} {action} #{channel}[/dim]'
+                f'[dim]* {msg.get("username")} joined #{msg.get("channel")}[/dim]'
             )
             return
 
-        # Fallback
+        # CHANNEL_LEAVE (29) — unsolicited when another user leaves
+        if rtype == 29:
+            console.print(
+                f'[dim]* {msg.get("username")} left #{msg.get("channel")}[/dim]'
+            )
+            return
+
+        # SET_USERNAME (34) — unsolicited when another user in your channel renames
+        if rtype == 34:
+            console.print(
+                f'[dim]* {msg.get("old_username")} is now known as '
+                f'{msg.get("new_username")}[/dim]'
+            )
+            return
+
+        # SERVER_MESSAGE (36)
+        if rtype == 36:
+            console.print(
+                f'[bold blue][Server][/bold blue] {msg.get("message")}'
+            )
+            return
+
+        # SERVER_SHUTDOWN (37)
+        if rtype == 37:
+            console.print(
+                f'[bold red][Server shutting down][/bold red] {msg.get("message")}'
+            )
+            return
+
+        # Silence PING responses (24) — fire-and-forget, no display needed
+        if rtype == 24:
+            return
+
+        # Fallback for anything unrecognised
         if msg:
             console.print(f'[dim]Server: {msg}[/dim]')
 
