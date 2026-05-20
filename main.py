@@ -92,7 +92,6 @@ async def _main() -> None:
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     )
 
-    # Resolve encryption keys
     private_key_hex = (
         args.private_key_hex
         or os.environ.get('CHAT_PRIVATE_KEY_HEX', '')
@@ -104,7 +103,6 @@ async def _main() -> None:
 
     if args.encrypted:
         if args.private_key_b64:
-            # Base64 path: decode private key and derive public key automatically
             try:
                 client_static_private = base64.b64decode(args.private_key_b64)
             except Exception as exc:
@@ -125,7 +123,6 @@ async def _main() -> None:
                 print(f'Error deriving public key from private key: {exc}', file=sys.stderr)
                 sys.exit(1)
         elif private_key_hex and public_key_hex:
-            # Hex path (legacy / explicit)
             try:
                 client_static_private = bytes.fromhex(private_key_hex)
                 client_static_public  = bytes.fromhex(public_key_hex)
@@ -158,8 +155,6 @@ async def _main() -> None:
         client_static_public=client_static_public,
     )
 
-    # If a username was provided connect immediately; otherwise the user can
-    # type /connect in the interactive UI.
     if args.username:
         try:
             await client.connect(args.username)
@@ -171,7 +166,6 @@ async def _main() -> None:
 
 
 def main() -> None:
-    """Synchronous wrapper for the async main function."""
     try:
         asyncio.run(_main())
     except KeyboardInterrupt:

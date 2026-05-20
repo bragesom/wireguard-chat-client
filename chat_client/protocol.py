@@ -1,18 +1,6 @@
-"""
-Chat protocol message definitions and helpers.
-
-All messages are encoded with MessagePack as specified.  Every request
-(except CONNECT) must include the ``session`` field obtained from the server
-during the CONNECT handshake.
-"""
 
 import random
 import msgpack
-
-
-# ---------------------------------------------------------------------------
-# Request type constants  (server-authoritative numbering)
-# ---------------------------------------------------------------------------
 
 REQUEST_CONNECT         = 1
 REQUEST_DISCONNECT      = 2
@@ -30,9 +18,6 @@ REQUEST_SET_USERNAME    = 13
 REQUEST_LIST_USERS      = 14   # Paginated user list (optional channel filter)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def new_handle() -> int:
     """Generate a random request handle (0 ≤ handle < 2^32)."""
@@ -48,10 +33,6 @@ def decode(data: bytes) -> dict:
     """Unpack MessagePack-encoded *data* into a Python dict."""
     return msgpack.unpackb(data, raw=False)
 
-
-# ---------------------------------------------------------------------------
-# Request builders
-# ---------------------------------------------------------------------------
 
 def connect_request() -> tuple[bytes, int]:
     handle = new_handle()

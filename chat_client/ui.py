@@ -1,25 +1,27 @@
 """
-Command-line user interface for the CSC4026Z chat client.
+Command-line user interface
 
-Supported commands
-==================
-/connect [username]         — Connect to the server (optionally set username)
-/disconnect                 — Disconnect from the server
-/username <name>            — Change your username
-/channels                   — List available channels
-/users                      — List connected users
-/userinfo <name>            — Get info about a user
-/channelinfo <channel>      — Get info about a channel
-/join <channel>             — Join a channel
-/leave <channel>            — Leave a channel
-/create <channel> [desc]    — Create a new channel
-/msg <channel> <text>       — Send a message to a channel
-/dm <user> <text>           — Send a direct message to a user
-/help                       — Show this help text
-/quit                       — Quit the application
+Session
+  /connect [username]
+  /disconnect
+  /username <name>
+  /whoami
 
-While connected to a channel you can also type plain text to send a message
-to your *current* channel (set with /join).
+Channels
+  /channels
+  /channelinfo <channel>
+  /join <channel>
+  /leave [channel]
+  /create <channel> [description]
+  /msg <channel> <text>
+
+Users
+  /users [channel]
+  /whois <username>
+  /dm <username> <text>
+
+  /help
+  /quit
 """
 
 import asyncio
@@ -39,10 +41,6 @@ from .client import ChatClient
 logger = logging.getLogger(__name__)
 console = Console()
 
-
-# ---------------------------------------------------------------------------
-# Pretty-print helpers
-# ---------------------------------------------------------------------------
 
 def _print_error(msg: str) -> None:
     console.print(f'[bold red]Error:[/bold red] {msg}')
@@ -65,7 +63,7 @@ def _render_response(data: dict) -> None:
     rtype = data.get('response_type')
 
     # Channels list (CHANNEL_LIST response_type=26)
-    if rtype == 26 or 'channels' in data:
+    if rtype == 26:
         table = Table(title='Channels', box=box.SIMPLE)
         table.add_column('Name', style='bold cyan')
         for ch in data.get('channels', []):
@@ -76,7 +74,7 @@ def _render_response(data: dict) -> None:
         return
 
     # Users list (USER_LIST response_type=35)
-    if rtype == 35 or 'users' in data:
+    if rtype == 35:
         table = Table(title='Connected Users', box=box.SIMPLE)
         table.add_column('Username', style='bold green')
         for user in data.get('users', []):
@@ -131,15 +129,27 @@ def _render_response(data: dict) -> None:
         )
         return
 
+    # CHANNEL_JOIN (response_type=28) — solicited response to /join
+    if rtype == 28:
+        desc = data.get('description', '')
+        if desc:
+            _print_info(f"Description: {desc}")
+        return
+
+    # CHANNEL_LEAVE (response_type=29) — solicited response to /leave
+    if rtype == 29:
+        return
+
+    # OK (response_type=21) — generic success acknowledgement
+    if rtype == 21:
+        return
+
     # Generic key-value fallback
     filtered = {k: v for k, v in data.items() if k != 'response_handle'}
     if filtered:
         console.print(filtered)
 
 
-# ---------------------------------------------------------------------------
-# Mutable UI state
-# ---------------------------------------------------------------------------
 
 @dataclass
 class UIState:
@@ -147,9 +157,6 @@ class UIState:
     current_channel: Optional[str] = None
 
 
-# ---------------------------------------------------------------------------
-# Server-push notification handler
-# ---------------------------------------------------------------------------
 
 def make_notification_handler(state: 'UIState') -> Callable[[dict], None]:
     """Return a callback that pretty-prints unsolicited server messages."""
@@ -219,20 +226,13 @@ def make_notification_handler(state: 'UIState') -> Callable[[dict], None]:
     return handler
 
 
-# ---------------------------------------------------------------------------
-# Command parser and dispatcher
-# ---------------------------------------------------------------------------
 
 async def handle_command(
     line: str,
     client: ChatClient,
     state: UIState,
 ) -> bool:
-    """Parse and dispatch a single input line.
-
-    Returns:
-        True to keep running, False to quit.
-    """
+    """Parse and dispatch one input line. Returns False to quit."""
     line = line.strip()
     if not line:
         return True
@@ -251,7 +251,6 @@ async def handle_command(
             )
         return True
 
-    # --- Commands ---
     parts = line.split(maxsplit=2)
     cmd   = parts[0].lower()
 
@@ -287,7 +286,6 @@ async def handle_command(
             return True
         try:
             resp = await client.set_username(parts[1])
-            _print_success(f'Username changed to {parts[1]!r}')
             _render_response(resp)
         except Exception as exc:
             _print_error(str(exc))
@@ -301,17 +299,26 @@ async def handle_command(
             _print_error(str(exc))
         return True
 
-    if cmd == '/users':
+    if cmd == '/whoami':
         try:
-            resp = await client.list_users()
+            resp = await client.whoami()
             _render_response(resp)
         except Exception as exc:
             _print_error(str(exc))
         return True
 
-    if cmd == '/userinfo':
+    if cmd == '/users':
+        channel = parts[1] if len(parts) > 1 else None
+        try:
+            resp = await client.list_users(channel=channel)
+            _render_response(resp)
+        except Exception as exc:
+            _print_error(str(exc))
+        return True
+
+    if cmd in ('/whois', '/userinfo'):
         if len(parts) < 2:
-            _print_error('Usage: /userinfo <username>')
+            _print_error('Usage: /whois <username>')
             return True
         try:
             resp = await client.user_info(parts[1])
@@ -408,16 +415,7 @@ async def handle_command(
     return True
 
 
-# ---------------------------------------------------------------------------
-# Main input loop
-# ---------------------------------------------------------------------------
-
 async def run_ui(client: ChatClient) -> None:
-    """Run the interactive UI event loop.
-
-    Reads lines from stdin using a thread executor so the event loop is not
-    blocked.
-    """
     loop  = asyncio.get_running_loop()
     state = UIState()
 
@@ -440,7 +438,6 @@ async def run_ui(client: ChatClient) -> None:
 
     while True:
         try:
-            # Read a line without blocking the event loop
             line = await loop.run_in_executor(None, input, _prompt())
         except (EOFError, KeyboardInterrupt):
             console.print('\n[dim]Exiting…[/dim]')
@@ -450,6 +447,5 @@ async def run_ui(client: ChatClient) -> None:
         if not keep_going:
             break
 
-    # Clean up
     if client.session:
         await client.disconnect()

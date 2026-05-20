@@ -31,5 +31,10 @@ Thumbs.db
 
 #keys
 .private_key
+server_pubkey
+
+#PDFs
+instructions
+
 
 
