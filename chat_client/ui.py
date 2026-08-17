@@ -26,14 +26,12 @@ Users
 
 import asyncio
 import logging
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from rich import box
 
 from .client import ChatClient

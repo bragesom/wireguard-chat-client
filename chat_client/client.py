@@ -1,14 +1,9 @@
-
+"""Async UDP chat client: session lifecycle and request/response correlation."""
 
 import asyncio
 import logging
-import os
 import socket
-import struct
-import time
 from typing import Callable, Optional
-
-import msgpack
 
 from . import protocol as proto
 from .wireguard import (
@@ -17,7 +12,6 @@ from .wireguard import (
     consume_response,
     decrypt_transport,
     encrypt_transport,
-    SERVER_STATIC_PUBLIC_KEY,
     MSG_RESPONSE,
     MSG_TRANSPORT,
 )

@@ -1,3 +1,4 @@
+"""Noise protocol primitives: DH, BLAKE2s hashing/MAC/KDF, AEAD, and TAI64N."""
 
 import hashlib
 import hmac

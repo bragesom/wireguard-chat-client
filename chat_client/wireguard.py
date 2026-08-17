@@ -11,13 +11,12 @@ Implements the simplified WireGuard protocol described in the CSC4026Z spec:
 
 import os
 import struct
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from .crypto import (
     AEAD, AEAD_decrypt,
     DH, DH_Generate,
-    Hash, MixHash, Mac, Hmac,
+    Hash, MixHash, Mac,
     Kdf1, Kdf2, Kdf3,
     Timestamp,
 )

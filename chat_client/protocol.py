@@ -1,3 +1,4 @@
+"""MessagePack encoding for the chat protocol's request messages."""
 
 import random
 import msgpack
