@@ -1,8 +1,7 @@
 # WireGuard Chat Client
 
 A terminal chat client that speaks a MessagePack-over-UDP protocol, optionally tunnelled
-through a WireGuard handshake implemented from scratch — no `wg` binary, no tunnel library,
-just the Noise primitives.
+through a WireGuard handshake implemented from scratch
 
 ![The client on startup, showing the banner and the command reference printed by /help](docs/screenshot.png)
 
