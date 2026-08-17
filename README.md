@@ -4,7 +4,7 @@ A terminal chat client that speaks a MessagePack-over-UDP protocol, optionally t
 through a WireGuard handshake implemented from scratch — no `wg` binary, no tunnel library,
 just the Noise primitives.
 
-![The client on startup, showing the banner and the command reference printed by /help](https://raw.githubusercontent.com/bragesom/wireguard-chat-client/main/docs/screenshot.png)
+![The client on startup, showing the banner and the command reference printed by /help](docs/screenshot.png)
 
 ## What this demonstrates
 
