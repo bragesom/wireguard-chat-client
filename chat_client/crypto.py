@@ -27,7 +27,8 @@ def MixHash(data1: bytes, data2: bytes) -> bytes:
 
 
 def Mac(key, input) -> bytes:
-    return hashlib.blake2s(key=key, data=input, digest_size=16).digest()
+    # blake2s takes its message positionally; passing it as data= is a TypeError
+    return hashlib.blake2s(input, key=key, digest_size=16).digest()
 
 
 def Hmac(key: bytes, data: bytes) -> bytes:
